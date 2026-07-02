@@ -84,7 +84,7 @@ button {
   border-radius: 18px;
   color: #11131f;
   font-weight: 1000;
-  letter-spacing: -0.08em;
+  letter-spacing: 0;
   background: linear-gradient(135deg, var(--gold), #ff8f3d);
   box-shadow: 0 12px 38px rgba(255, 200, 87, 0.22);
 }
@@ -330,13 +330,18 @@ canvas {
   margin-bottom: 12px;
   font-size: clamp(2rem, 5vw, 4.2rem);
   line-height: 0.95;
-  letter-spacing: -0.06em;
+  letter-spacing: 0;
 }
 
 .copy {
   max-width: 62ch;
   margin-bottom: 22px;
   line-height: 1.6;
+}
+
+.hero-modal {
+  max-height: min(92vh, 860px);
+  overflow-y: auto;
 }
 
 .menu-grid {
@@ -423,6 +428,37 @@ select option {
   line-height: 1.45;
 }
 
+.live-stats {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 260px;
+}
+
+.live-stats span {
+  display: grid;
+  gap: 2px;
+  min-width: 86px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255,255,255,0.11);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.05);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.live-stats strong {
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.1;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .scorecards {
   display: grid;
   gap: 10px;
@@ -437,6 +473,38 @@ select option {
   border-radius: 18px;
   padding: 12px 14px;
   background: rgba(255,255,255,0.055);
+}
+
+.reward-summary {
+  display: none;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0 16px;
+}
+
+.reward-summary.open {
+  display: grid;
+}
+
+.reward-summary span {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.055);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.reward-summary strong {
+  color: var(--text);
+  font-size: 1rem;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .mobile-controls {
@@ -505,6 +573,16 @@ select option {
     text-align: left;
   }
 
+  .live-stats {
+    justify-content: flex-start;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .upgrade-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .mobile-controls {
     display: flex;
     justify-content: space-between;
@@ -528,6 +606,25 @@ select option {
 
   .mobile-controls {
     flex-direction: column;
+  }
+
+  .camp-head,
+  .reward-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .camp-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .camp-head small {
+    text-align: left;
+  }
+
+  .upgrade-grid,
+  .reward-summary.open {
+    grid-template-columns: 1fr;
   }
 
   .stick,
@@ -560,7 +657,7 @@ select option {
   display: block;
   margin-top: 3px;
   font-size: 1.25rem;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
 }
 
 .career-label {
@@ -606,4 +703,86 @@ select option {
 
 #careerXpText {
   color: var(--muted);
+}
+
+.camp-panel {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid rgba(61, 184, 255, 0.18);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top right, rgba(61, 184, 255, 0.12), transparent 38%),
+    rgba(255, 255, 255, 0.045);
+}
+
+.camp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.camp-head strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 1.05rem;
+}
+
+.camp-head small {
+  color: var(--muted);
+  font-weight: 800;
+  text-align: right;
+}
+
+.upgrade-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.upgrade-btn {
+  min-height: 116px;
+  display: grid;
+  align-content: space-between;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 16px;
+  padding: 12px;
+  color: var(--text);
+  background: rgba(255,255,255,0.06);
+  text-align: left;
+}
+
+.upgrade-btn:hover {
+  border-color: rgba(61, 184, 255, 0.42);
+  background: rgba(61, 184, 255, 0.10);
+}
+
+.upgrade-btn:disabled {
+  cursor: default;
+  opacity: 0.56;
+}
+
+.upgrade-btn strong,
+.upgrade-btn small,
+.upgrade-btn span {
+  display: block;
+}
+
+.upgrade-btn strong {
+  font-size: 0.88rem;
+}
+
+.upgrade-btn small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.upgrade-btn span {
+  color: var(--gold);
+  font-size: 0.78rem;
+  font-weight: 900;
 }

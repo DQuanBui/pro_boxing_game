@@ -61,23 +61,25 @@
             <p class="copy">Win three intense rounds or score a knockout. Manage stamina, block smart, dodge counters, build power, and survive a pressure-fighting AI.</p>
 
             <div class="career-card">
-                <div>
-                    <span class="career-label">Career</span>
-                    <strong id="careerTitle">Rookie Prospect</strong>
-                </div>
+              <div>
+                <span class="career-label">Career</span>
+                <strong id="careerTitle">Rookie Prospect</strong>
+              </div>
 
-                <div class="career-stats">
-                    <span id="careerRecord">0-0-0</span>
-                    <span id="careerLevel">Level 1</span>
-                    <span id="careerCash">$0</span>
-                    <span id="careerKos">0 KOs</span>
-                </div>
+              <div class="career-stats">
+                <span id="careerRecord">0-0-0</span>
+                <span id="careerLevel">Level 1</span>
+                <span id="careerCash">$0</span>
+                <span id="careerKos">0 KOs</span>
+                <span id="careerBest">Best 0 pts</span>
+                <span id="careerAchievements">0 badges</span>
+              </div>
 
-                <div class="career-progress">
-                    <span id="careerXpBar"></span>
-                </div>
+              <div class="career-progress">
+                <span id="careerXpBar"></span>
+              </div>
 
-                <small id="careerXpText">0 / 100 XP</small>
+              <small id="careerXpText">0 / 100 XP</small>
             </div>
 
             <div class="menu-grid">
@@ -102,7 +104,7 @@
                 </select>
               </label>
               <label>
-                Round TiSme
+                Round Time
                 <select id="timeSelect">
                   <option value="45">45 seconds</option>
                   <option value="60" selected>60 seconds</option>
@@ -117,9 +119,20 @@
                 <button id="resetCareerBtn" class="ghost-btn" type="button">Reset Career</button>
             </div>
 
+            <div class="camp-panel">
+              <div class="camp-head">
+                <div>
+                  <span class="career-label">Fight Camp</span>
+                  <strong>Spend cash on upgrades</strong>
+                </div>
+                <small id="sponsorObjective">Objective: Score 260 points</small>
+              </div>
+              <div id="upgradeGrid" class="upgrade-grid" aria-label="Career upgrades"></div>
+            </div>
+
             <div class="tips">
               <strong>Controls:</strong>
-              <span>A/D or ←/→ move</span>
+              <span>A/D or arrows move</span>
               <span>J Jab</span>
               <span>K Cross</span>
               <span>L Hook</span>
@@ -149,6 +162,7 @@
             <p class="eyebrow" id="resultEyebrow">Fight Over</p>
             <h2 id="resultTitle">Result</h2>
             <p class="copy" id="resultCopy">Fight summary appears here.</p>
+            <div id="rewardSummary" class="reward-summary"></div>
             <div id="scorecards" class="scorecards"></div>
             <div class="button-row">
               <button id="againBtn" class="primary-btn" type="button">Fight Again</button>
@@ -167,13 +181,18 @@
         <div class="instructions">
           <span><b>Tip:</b> Jabs are safe, hooks hurt, uppercuts punish dodges, blocking reduces damage but drains stamina.</span>
         </div>
+        <div class="live-stats" aria-label="Live fight stats">
+          <span>Points <strong id="pointsLabel">0</strong></span>
+          <span>Clean Hits <strong id="cleanHitsLabel">0</strong></span>
+          <span>Objective <strong id="objectiveLabel">--</strong></span>
+        </div>
       </div>
     </section>
 
     <section class="mobile-controls" aria-label="Mobile controls">
       <div class="stick">
-        <button data-hold="left" type="button">◀</button>
-        <button data-hold="right" type="button">▶</button>
+        <button data-hold="left" type="button">Left</button>
+        <button data-hold="right" type="button">Right</button>
       </div>
       <div class="actions">
         <button data-tap="jab" type="button">Jab</button>

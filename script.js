@@ -46,9 +46,17 @@
     careerLevel: $('careerLevel'),
     careerCash: $('careerCash'),
     careerKos: $('careerKos'),
+    careerBest: $('careerBest'),
+    careerAchievements: $('careerAchievements'),
     careerXpBar: $('careerXpBar'),
     careerXpText: $('careerXpText'),
-    resetCareerBtn: $('resetCareerBtn')
+    resetCareerBtn: $('resetCareerBtn'),
+    upgradeGrid: $('upgradeGrid'),
+    sponsorObjective: $('sponsorObjective'),
+    rewardSummary: $('rewardSummary'),
+    pointsLabel: $('pointsLabel'),
+    cleanHitsLabel: $('cleanHitsLabel'),
+    objectiveLabel: $('objectiveLabel')
   };
 
   const W = 1280;
@@ -85,51 +93,52 @@
   };
 
   const CareerStore = {
-  load() {
-    const data = window.MBC_DATA;
-    const fallback = data.createDefaultCareer();
+    load() {
+      const data = window.MBC_DATA;
 
-    try {
-      const raw = localStorage.getItem(data.storageKey);
-      if (!raw) return fallback;
+      try {
+        const raw = localStorage.getItem(data.storageKey);
+        return data.normalizeCareer(raw ? JSON.parse(raw) : null);
+      } catch {
+        return data.createDefaultCareer();
+      }
+    },
 
-      const saved = JSON.parse(raw);
-      return {
-        ...fallback,
-        ...saved,
-        upgrades: {
-          ...fallback.upgrades,
-          ...(saved.upgrades || {})
-        }
-      };
-    } catch {
-      return fallback;
+    save(career) {
+      const data = window.MBC_DATA;
+      localStorage.setItem(data.storageKey, JSON.stringify(data.normalizeCareer(career)));
+    },
+
+    reset() {
+      const fresh = window.MBC_DATA.createDefaultCareer();
+      this.save(fresh);
+      return fresh;
+    },
+
+    addXP(career, xp) {
+      const data = window.MBC_DATA;
+      const gained = Math.max(0, Math.round(xp));
+      let levelsGained = 0;
+      let levelCash = 0;
+
+      career.xp += gained;
+      career.totalXp += gained;
+
+      let needed = data.xpToNextLevel(career.level);
+      while (career.xp >= needed) {
+        career.xp -= needed;
+        career.level += 1;
+        levelsGained += 1;
+        levelCash += 100;
+        career.cash += 100;
+        career.totalCash += 100;
+        needed = data.xpToNextLevel(career.level);
+      }
+
+      career.title = data.titleForLevel(career.level);
+      return { levelsGained, levelCash };
     }
-  },
-
-  save(career) {
-    localStorage.setItem(window.MBC_DATA.storageKey, JSON.stringify(career));
-  },
-
-  reset() {
-    const fresh = window.MBC_DATA.createDefaultCareer();
-    this.save(fresh);
-    return fresh;
-  },
-
-  addXP(career, xp) {
-    career.xp += xp;
-
-    let needed = window.MBC_DATA.xpToNextLevel(career.level);
-
-    while (career.xp >= needed) {
-      career.xp -= needed;
-      career.level += 1;
-      career.cash += 100;
-      needed = window.MBC_DATA.xpToNextLevel(career.level);
-    }
-  }
-};
+  };
 
   const DIFFICULTY = {
     rookie: { label: 'Rookie', aiRate: 0.72, aiDefense: 0.42, aiPower: 0.86, aiStamina: 0.9, getUp: 0.58 },
@@ -354,8 +363,19 @@
     }
 
     resetFight() {
-      this.health = 100;
-      this.stamina = 100;
+      this.maxHealth = 100;
+      this.maxStamina = 100;
+      this.damageMultiplier = 1;
+      this.staminaRegenMultiplier = 1;
+      this.punchCostMultiplier = 1;
+      this.speedMultiplier = 1;
+      this.scoreMultiplier = 1;
+      this.powerGainBonus = 0;
+      this.blockEfficiency = 1;
+      this.dodgeDiscount = 0;
+      this.dodgeBoost = 0;
+      this.health = this.maxHealth;
+      this.stamina = this.maxStamina;
       this.power = 0;
       this.score = 0;
       this.roundScore = 0;
@@ -384,8 +404,10 @@
     }
 
     resetRound() {
-      this.health = clamp(this.health + 18, 24, 100);
-      this.stamina = 100;
+      const maxHealth = this.maxHealth || 100;
+      const maxStamina = this.maxStamina || 100;
+      this.health = clamp(this.health + maxHealth * 0.18, 24, maxHealth);
+      this.stamina = maxStamina;
       this.roundScore = 0;
       this.damageDoneRound = 0;
       this.cleanHitsRound = 0;
@@ -418,11 +440,13 @@
     startPunch(type, game) {
       const punch = PUNCHES[type];
       if (!punch || !this.canAct()) return false;
+      const maxStamina = this.maxStamina || 100;
+      const cost = Math.max(3, punch.cost * (this.punchCostMultiplier || 1));
       if (punch.requiresPower && this.power < 100) {
         if (this.isPlayer) game.setMessage('Power meter is not full yet.', 0.8);
         return false;
       }
-      if (this.stamina < punch.cost) {
+      if (this.stamina < cost) {
         if (this.isPlayer) game.setMessage('Too tired. Back up and recover stamina.', 0.8);
         return false;
       }
@@ -431,19 +455,20 @@
       this.punch = type;
       this.hasHit = false;
       this.blocking = false;
-      this.stamina = clamp(this.stamina - punch.cost, 0, 100);
+      this.stamina = clamp(this.stamina - cost, 0, maxStamina);
       if (punch.requiresPower) this.power = 0;
       game.audio.punch(punch.sound);
       return true;
     }
 
     startDodge() {
-      if (!this.canAct() || this.stamina < 11) return false;
+      const cost = Math.max(6, 11 - (this.dodgeDiscount || 0));
+      if (!this.canAct() || this.stamina < cost) return false;
       this.state = 'dodge';
       this.stateTime = 0;
-      this.dodgeTimer = 0.28;
+      this.dodgeTimer = 0.28 + (this.dodgeBoost || 0);
       this.blocking = false;
-      this.stamina = clamp(this.stamina - 11, 0, 100);
+      this.stamina = clamp(this.stamina - cost, 0, this.maxStamina || 100);
       this.vx -= this.facing * 210;
       return true;
     }
@@ -458,8 +483,10 @@
       this.getupMeter = 0;
       this.knockdowns += 1;
       this.roundKnockdowns += 1;
-      by.score += 80;
-      by.roundScore += 80;
+      const knockdownScore = Math.round(80 * (by.scoreMultiplier || 1));
+      by.score += knockdownScore;
+      by.roundScore += knockdownScore;
+      if (by.isPlayer) game.recordKnockdown();
       this.lastHitBy = by;
       game.bigImpact(this.x, this.y - 120, this.corner === 'blue' ? '#3db8ff' : '#ff4e64');
       game.setMessage(`${this.name} is down!`, 1.2);
@@ -475,34 +502,40 @@
 
       if (dodged) {
         game.floatText(this.x, this.y - 160, 'MISS', '#aeb8d8');
-        this.power = clamp(this.power + 6, 0, 100);
+        this.power = clamp(this.power + 6 + (this.powerGainBonus || 0), 0, 100);
+        if (this.isPlayer) game.recordDefense('dodge');
         return { landed: false, guarded: false, dodged: true, damage: 0 };
       }
 
       let damage = guarded ? punch.guardDamage : punch.damage;
       damage *= attacker.ai ? game.rules.aiPower : 1;
+      damage *= attacker.damageMultiplier || 1;
       damage *= attacker.stamina < 25 ? 0.72 : 1;
       damage *= this.stamina < 20 && !guarded ? 1.15 : 1;
       damage *= punchType === 'power' ? 1 + attacker.combo * 0.025 : 1;
 
       if (guarded) {
-        this.stamina = clamp(this.stamina - punch.staminaDamage, 0, 100);
-        attacker.score += Math.round(punch.score * 0.35);
-        attacker.roundScore += Math.round(punch.score * 0.35);
+        this.stamina = clamp(this.stamina - punch.staminaDamage / (this.blockEfficiency || 1), 0, this.maxStamina || 100);
+        const guardScore = Math.round(punch.score * 0.35 * (attacker.scoreMultiplier || 1));
+        attacker.score += guardScore;
+        attacker.roundScore += guardScore;
+        if (this.isPlayer) game.recordDefense('block');
         game.guardImpact(this.x + this.facing * 34, this.y + punch.y + 12);
         game.audio.hit(false);
       } else {
-        this.health = clamp(this.health - damage, 0, 100);
+        this.health = clamp(this.health - damage, 0, this.maxHealth || 100);
         this.flash = 0.15;
         this.stun = Math.max(this.stun, punchType === 'jab' ? 0.08 : punchType === 'power' ? 0.34 : 0.18);
         this.vx += attacker.facing * (punchType === 'power' ? 250 : 125);
-        attacker.score += punch.score;
-        attacker.roundScore += punch.score;
+        const cleanScore = Math.round(punch.score * (attacker.scoreMultiplier || 1));
+        attacker.score += cleanScore;
+        attacker.roundScore += cleanScore;
         attacker.damageDoneRound += damage;
         attacker.cleanHitsRound += 1;
         attacker.combo += 1;
         attacker.comboTimer = 1.65;
-        attacker.power = clamp(attacker.power + punch.powerGain + (punchType === 'power' ? 0 : 2), 0, 100);
+        attacker.power = clamp(attacker.power + punch.powerGain + (punchType === 'power' ? 0 : 2) + (attacker.powerGainBonus || 0), 0, 100);
+        if (attacker.isPlayer) game.recordCleanHit(punchType, damage, attacker.combo);
         game.hitImpact(this.x - this.facing * 28, this.y + punch.y + 8, punchType, damage);
         game.audio.hit(punchType === 'hook' || punchType === 'uppercut' || punchType === 'power');
         game.shake = Math.max(game.shake, punchType === 'power' ? 18 : punchType === 'jab' ? 4 : 9);
@@ -563,9 +596,10 @@
         this.blocking = false;
       }
 
-      const regen = this.blocking ? 5 : this.state === 'idle' ? 18 : 8;
-      this.stamina = clamp(this.stamina + regen * dt, 0, 100);
-      if (this.blocking) this.stamina = clamp(this.stamina - 5.5 * dt, 0, 100);
+      const maxStamina = this.maxStamina || 100;
+      const regen = (this.blocking ? 5 : this.state === 'idle' ? 18 : 8) * (this.staminaRegenMultiplier || 1);
+      this.stamina = clamp(this.stamina + regen * dt, 0, maxStamina);
+      if (this.blocking) this.stamina = clamp(this.stamina - (5.5 / (this.blockEfficiency || 1)) * dt, 0, maxStamina);
       if (this.stamina <= 2) this.blocking = false;
 
       this.vx *= Math.pow(0.0008, dt);
@@ -608,7 +642,7 @@
       const left = input.pressed('KeyA', 'ArrowLeft');
       const right = input.pressed('KeyD', 'ArrowRight');
       const block = input.pressed('ShiftLeft', 'ShiftRight');
-      const speed = this.stamina < 25 ? 165 : 225;
+      const speed = (this.stamina < 25 ? 165 : 225) * (this.speedMultiplier || 1);
 
       if (this.canAct()) {
         if (left) this.vx -= speed * dt * 8;
@@ -912,6 +946,8 @@
       this.scoreHistory = [];
       this.countNumber = 0;
       this.roundBreakTimer = 0;
+      this.fightStats = this.createFightStats();
+      this.activeObjective = window.MBC_DATA.pickObjective(this.career);
       this.crowdSeed = Array.from({ length: 120 }, (_, i) => ({
         x: (i % 30) * 45 + rand(-8, 8),
         y: Math.floor(i / 30) * 36 + rand(-6, 6),
@@ -922,6 +958,7 @@
       window.addEventListener('resize', () => this.resizeCanvas());
       requestAnimationFrame((t) => this.loop(t));
       this.updateUI();
+      this.renderUpgrades();
       this.draw();
     }
 
@@ -934,11 +971,17 @@
       UI.menuBtn.addEventListener('click', () => this.openMenu());
       UI.againBtn.addEventListener('click', () => this.start(this.training));
       UI.resultMenuBtn.addEventListener('click', () => this.openMenu());
+      UI.upgradeGrid.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-upgrade]');
+        if (button) this.buyUpgrade(button.dataset.upgrade);
+      });
       UI.resetCareerBtn.addEventListener('click', () => {
         const confirmed = window.confirm('Reset your career save? This will erase wins, XP, money, and upgrades.');
         if (!confirmed) return;
 
         this.career = CareerStore.reset();
+        this.activeObjective = window.MBC_DATA.pickObjective(this.career);
+        this.renderUpgrades();
         this.updateCareerUI();
         this.setMessage('Career reset.', 1);
         });
@@ -968,6 +1011,8 @@
       this.difficultyKey = UI.difficultySelect.value;
       this.rules = DIFFICULTY[this.difficultyKey] || DIFFICULTY.contender;
       this.player.name = (UI.nameInput.value || 'Blue').trim().slice(0, 14) || 'Blue';
+      this.fightStats = this.createFightStats();
+      this.activeObjective = training ? null : window.MBC_DATA.pickObjective(this.career);
       if (!training) {
         this.career.fighterName = this.player.name;
         CareerStore.save(this.career);
@@ -977,6 +1022,7 @@
       this.countNumber = 0;
       this.player.resetFight();
       this.enemy.resetFight();
+      this.applyCareerBonuses();
       this.enemy.health = training ? 120 : 100;
       this.enemy.ai.timer = 1;
       this.particles = [];
@@ -985,10 +1031,12 @@
       hide(UI.mainMenu);
       hide(UI.resultMenu);
       hide(UI.pauseMenu);
+      this.renderRewardSummary(null);
       this.audio.bell();
       window.setTimeout(() => {
         if (this.phase === 'intro') this.phase = 'fighting';
       }, 850);
+      this.renderUpgrades();
       this.updateUI();
     }
 
@@ -999,7 +1047,10 @@
       show(UI.mainMenu);
       hide(UI.pauseMenu);
       hide(UI.resultMenu);
+      this.renderRewardSummary(null);
       this.setMessage('Press Start Fight', 1);
+      this.activeObjective = window.MBC_DATA.pickObjective(this.career);
+      this.renderUpgrades();
       this.updateUI();
     }
 
@@ -1157,6 +1208,7 @@
       if (this.phase === 'ended') return;
       this.phase = 'ended';
       this.running = false;
+      this.fightStats.points = Math.round(this.player.score);
       hide(UI.pauseMenu);
 
       if (!winner && method === 'Decision') {
@@ -1172,42 +1224,70 @@
 
       const playerWon = winner === this.player;
       const draw = !winner;
+      const outcome = draw ? 'draw' : playerWon ? 'win' : 'loss';
       const totalPlayer = this.scoreHistory.reduce((sum, r) => sum + r.player, 0);
       const totalEnemy = this.scoreHistory.reduce((sum, r) => sum + r.enemy, 0);
+      let rewardSummary = null;
+      let objectiveResult = null;
       let careerRewardText = '';
 
       if (!this.training) {
-        const outcome = draw ? 'draw' : playerWon ? 'win' : 'loss';
-
-        const rewards = window.MBC_DATA.calculateRewards({
-            outcome,
-            method,
-            difficulty: this.difficultyKey,
-            playerScore: this.player.score
+        const baseRewards = window.MBC_DATA.calculateRewards({
+          outcome,
+          method,
+          difficulty: this.difficultyKey,
+          playerScore: this.player.score
         });
 
-        this.career.fights += 1;
+        rewardSummary = {
+          xp: baseRewards.xp,
+          cash: baseRewards.cash,
+          levelUps: 0,
+          levelCash: 0,
+          objectivePoints: 0,
+          achievements: []
+        };
 
+        this.career.fights += 1;
         if (outcome === 'win') this.career.wins += 1;
         if (outcome === 'loss') this.career.losses += 1;
         if (outcome === 'draw') this.career.draws += 1;
         if (outcome === 'win' && method === 'KO') this.career.kos += 1;
 
-        this.career.cash += rewards.cash;
-        CareerStore.addXP(this.career, rewards.xp);
+        const fightPoints = Math.round(this.player.score);
+        this.career.totalPoints += fightPoints;
+        if (fightPoints > this.career.bestScore) this.career.bestScore = fightPoints;
 
-        if (this.player.score > this.career.bestScore) {
-            this.career.bestScore = Math.round(this.player.score);
+        objectiveResult = this.evaluateObjective();
+        if (objectiveResult && objectiveResult.completed) {
+          rewardSummary.xp += objectiveResult.reward.xp;
+          rewardSummary.cash += objectiveResult.reward.cash;
+          rewardSummary.objectivePoints += objectiveResult.reward.points;
+          this.career.totalPoints += objectiveResult.reward.points;
         }
 
-        if (this.career.level >= 5) this.career.title = 'Dangerous Contender';
-        if (this.career.level >= 10) this.career.title = 'Title Challenger';
-        if (this.career.level >= 15) this.career.title = 'World Champion';
+        rewardSummary.achievements = this.unlockAchievements({
+          outcome,
+          method,
+          difficulty: this.difficultyKey
+        });
 
+        rewardSummary.achievements.forEach((achievement) => {
+          rewardSummary.xp += achievement.reward.xp;
+          rewardSummary.cash += achievement.reward.cash;
+        });
+
+        this.career.cash += rewardSummary.cash;
+        this.career.totalCash += rewardSummary.cash;
+        const levelInfo = CareerStore.addXP(this.career, rewardSummary.xp);
+        rewardSummary.levelUps = levelInfo.levelsGained;
+        rewardSummary.levelCash = levelInfo.levelCash;
         CareerStore.save(this.career);
+        this.renderUpgrades();
 
-        careerRewardText = ` Career rewards: +${rewards.xp} XP, +$${rewards.cash}.`;
-        }
+        careerRewardText = ` Rewards: +${rewardSummary.xp} XP, +$${rewardSummary.cash + rewardSummary.levelCash}.`;
+      }
+
       const title = draw ? 'Majority Draw' : playerWon ? 'You Win!' : 'You Lose';
       const by = method === 'KO' ? 'by knockout' : `by decision ${totalPlayer}-${totalEnemy}`;
 
@@ -1216,13 +1296,24 @@
       UI.resultCopy.textContent = draw
         ? `After ${this.scoreHistory.length} round(s), the judges could not separate the fighters.${careerRewardText}`
         : `${winner.name} wins ${by}. Final fight score: ${this.player.name} ${totalPlayer}, ${this.enemy.name} ${totalEnemy}.${careerRewardText}`;
+
+      this.renderRewardSummary(rewardSummary, objectiveResult);
       UI.scorecards.innerHTML = '';
 
-      const rows = this.scoreHistory.length ? this.scoreHistory : [{ round: this.round, player: 0, enemy: 0, playerHits: this.player.cleanHitsRound, enemyHits: this.enemy.cleanHitsRound }];
+      const rows = this.scoreHistory.length
+        ? this.scoreHistory
+        : [{ round: this.round, player: 0, enemy: 0, playerHits: this.player.cleanHitsRound, enemyHits: this.enemy.cleanHitsRound }];
       rows.forEach((r) => {
         const div = document.createElement('div');
+        const strong = document.createElement('strong');
+        const span = document.createElement('span');
+        const small = document.createElement('small');
+
         div.className = 'scorecard';
-        div.innerHTML = `<strong>Round ${r.round}</strong><span>${this.player.name}: ${r.player} · ${this.enemy.name}: ${r.enemy}</span><small>Clean hits ${r.playerHits}-${r.enemyHits}</small>`;
+        strong.textContent = `Round ${r.round}`;
+        span.textContent = `${this.player.name}: ${r.player} - ${this.enemy.name}: ${r.enemy}`;
+        small.textContent = `Clean hits ${r.playerHits}-${r.enemyHits}`;
+        div.append(strong, span, small);
         UI.scorecards.appendChild(div);
       });
 
@@ -1285,43 +1376,229 @@
       this.flashAlpha = 0.32;
     }
 
+    createFightStats() {
+      return {
+        points: 0,
+        cleanHits: 0,
+        damage: 0,
+        knockdowns: 0,
+        maxCombo: 0,
+        powerShots: 0,
+        blocks: 0,
+        dodges: 0
+      };
+    }
+
+    recordCleanHit(punchType, damage, combo) {
+      this.fightStats.cleanHits += 1;
+      this.fightStats.damage += damage;
+      this.fightStats.maxCombo = Math.max(this.fightStats.maxCombo, combo);
+      if (punchType === 'power') this.fightStats.powerShots += 1;
+    }
+
+    recordDefense(type) {
+      if (type === 'block') this.fightStats.blocks += 1;
+      if (type === 'dodge') this.fightStats.dodges += 1;
+    }
+
+    recordKnockdown() {
+      this.fightStats.knockdowns += 1;
+    }
+
+    evaluateObjective() {
+      if (!this.activeObjective) return null;
+      const value = window.MBC_DATA.readMetric(this.fightStats, this.activeObjective.metric);
+      return {
+        ...this.activeObjective,
+        value,
+        completed: value >= this.activeObjective.target
+      };
+    }
+
+    achievementMet(achievement, context) {
+      const condition = achievement.condition;
+      if (condition.type === 'outcome') return context.outcome === condition.value;
+      if (condition.type === 'method') return context.method === condition.value && context.outcome === 'win';
+      if (condition.type === 'difficultyWin') return context.outcome === 'win' && context.difficulty === condition.value;
+      if (condition.type === 'statAtLeast') return (this.fightStats[condition.stat] || 0) >= condition.value;
+      if (condition.type === 'careerAtLeast') return (this.career[condition.stat] || 0) >= condition.value;
+      return false;
+    }
+
+    unlockAchievements(context) {
+      const unlocked = [];
+      window.MBC_DATA.achievements.forEach((achievement) => {
+        if (this.career.achievements[achievement.id]) return;
+        if (!this.achievementMet(achievement, context)) return;
+        this.career.achievements[achievement.id] = true;
+        unlocked.push(achievement);
+      });
+      return unlocked;
+    }
+
+    renderRewardSummary(summary, objective) {
+      UI.rewardSummary.innerHTML = '';
+      if (!summary) {
+        UI.rewardSummary.classList.remove('open');
+        return;
+      }
+
+      const cash = summary.cash + summary.levelCash;
+      const objectiveText = objective
+        ? objective.completed ? 'Completed' : `${Math.floor(objective.value)} / ${objective.target}`
+        : 'Training';
+      const badgeText = summary.achievements.length
+        ? summary.achievements.map((achievement) => achievement.label).join(', ')
+        : 'None';
+
+      [
+        ['XP', `+${summary.xp}`],
+        ['Cash', `+$${cash}`],
+        ['Objective', objectiveText],
+        ['Bonus Points', `+${summary.objectivePoints}`],
+        ['Level Ups', summary.levelUps ? `+${summary.levelUps}` : '0'],
+        ['Badges', badgeText]
+      ].forEach(([label, value]) => {
+        const item = document.createElement('span');
+        const labelNode = document.createTextNode(label);
+        const strong = document.createElement('strong');
+        strong.textContent = value;
+        item.append(labelNode, strong);
+        UI.rewardSummary.appendChild(item);
+      });
+
+      UI.rewardSummary.classList.add('open');
+    }
+
+    renderUpgrades() {
+      UI.upgradeGrid.innerHTML = '';
+      window.MBC_DATA.upgradeDefinitions.forEach((upgrade) => {
+        const level = this.career.upgrades[upgrade.id] || 0;
+        const cost = window.MBC_DATA.getUpgradeCost(upgrade.id, level);
+        const button = document.createElement('button');
+        const affordable = cost !== null && this.career.cash >= cost;
+
+        button.className = 'upgrade-btn';
+        button.type = 'button';
+        button.dataset.upgrade = upgrade.id;
+        button.disabled = cost === null || !affordable;
+        button.innerHTML = `
+          <strong>${upgrade.label}</strong>
+          <small>${upgrade.stat} Lv ${level}/${upgrade.max}</small>
+          <small>${upgrade.description}</small>
+          <span>${cost === null ? 'Maxed' : `$${cost}`}</span>
+        `;
+
+        UI.upgradeGrid.appendChild(button);
+      });
+    }
+
+    buyUpgrade(id) {
+      const upgrade = window.MBC_DATA.upgradeDefinitions.find((item) => item.id === id);
+      if (!upgrade) return;
+
+      const level = this.career.upgrades[id] || 0;
+      const cost = window.MBC_DATA.getUpgradeCost(id, level);
+      if (cost === null) {
+        this.setMessage(`${upgrade.label} is maxed out.`, 1);
+        return;
+      }
+      if (this.career.cash < cost) {
+        this.setMessage(`Need $${cost} for ${upgrade.label}.`, 1);
+        return;
+      }
+
+      this.career.cash -= cost;
+      this.career.upgrades[id] = level + 1;
+      CareerStore.save(this.career);
+      this.setMessage(`${upgrade.label} upgraded to level ${level + 1}.`, 1.2);
+      this.applyCareerBonuses();
+      this.renderUpgrades();
+      this.updateCareerUI();
+    }
+
+    applyCareerBonuses() {
+      if (!this.player || !this.career) return;
+      const upgrades = this.career.upgrades || {};
+      const conditioning = upgrades.conditioning || 0;
+      const hands = upgrades.hands || 0;
+      const chin = upgrades.chin || 0;
+      const footwork = upgrades.footwork || 0;
+      const focus = upgrades.focus || 0;
+
+      this.player.maxHealth = 100 + chin * 5;
+      this.player.maxStamina = 100 + conditioning * 5;
+      this.player.damageMultiplier = 1 + hands * 0.055;
+      this.player.staminaRegenMultiplier = 1 + conditioning * 0.1;
+      this.player.punchCostMultiplier = 1 - conditioning * 0.035;
+      this.player.speedMultiplier = 1 + footwork * 0.045;
+      this.player.scoreMultiplier = 1 + focus * 0.04;
+      this.player.powerGainBonus = hands * 0.6 + focus * 1.8;
+      this.player.blockEfficiency = 1 + chin * 0.08;
+      this.player.dodgeDiscount = footwork * 0.65;
+      this.player.dodgeBoost = footwork * 0.018;
+      this.player.health = clamp(this.player.health, 0, this.player.maxHealth);
+      this.player.stamina = clamp(this.player.stamina, 0, this.player.maxStamina);
+      if (this.phase === 'intro' || this.phase === 'fighting') {
+        this.player.power = Math.max(this.player.power, Math.min(35, focus * 7));
+      }
+    }
+
     updateCareerUI() {
-    if (!this.career) return;
+      if (!this.career) return;
 
-    const needed = window.MBC_DATA.xpToNextLevel(this.career.level);
-    const progress = clamp((this.career.xp / needed) * 100, 0, 100);
+      const needed = window.MBC_DATA.xpToNextLevel(this.career.level);
+      const progress = clamp((this.career.xp / needed) * 100, 0, 100);
+      const badges = Object.values(this.career.achievements || {}).filter(Boolean).length;
+      const menuObjective = this.activeObjective || window.MBC_DATA.pickObjective(this.career);
 
-    UI.careerTitle.textContent = this.career.title;
-    UI.careerRecord.textContent = `${this.career.wins}-${this.career.losses}-${this.career.draws}`;
-    UI.careerLevel.textContent = `Level ${this.career.level}`;
-    UI.careerCash.textContent = `$${this.career.cash}`;
-    UI.careerKos.textContent = `${this.career.kos} KOs`;
-    UI.careerXpBar.style.width = `${progress}%`;
-    UI.careerXpText.textContent = `${this.career.xp} / ${needed} XP`;
-}
+      UI.careerTitle.textContent = this.career.title;
+      UI.careerRecord.textContent = `${this.career.wins}-${this.career.losses}-${this.career.draws}`;
+      UI.careerLevel.textContent = `Level ${this.career.level}`;
+      UI.careerCash.textContent = `$${this.career.cash}`;
+      UI.careerKos.textContent = `${this.career.kos} KOs`;
+      UI.careerBest.textContent = `Best ${this.career.bestScore} pts`;
+      UI.careerAchievements.textContent = `${badges} badge${badges === 1 ? '' : 's'}`;
+      UI.careerXpBar.style.width = `${progress}%`;
+      UI.careerXpText.textContent = `${this.career.xp} / ${needed} XP`;
+      UI.sponsorObjective.textContent = menuObjective
+        ? `Objective: ${menuObjective.label}`
+        : 'Objective: Training has no career rewards';
+    }
 
     updateUI() {
-      const ph = clamp(this.player.health, 0, 100);
+      this.fightStats.points = Math.round(this.player.score);
+      const playerMaxHealth = this.player.maxHealth || 100;
+      const playerMaxStamina = this.player.maxStamina || 100;
+      const ph = clamp((this.player.health / playerMaxHealth) * 100, 0, 100);
       const eh = clamp(this.enemy.health, 0, this.training ? 120 : 100);
       UI.playerName.textContent = this.player.name;
       UI.enemyName.textContent = this.enemy.name;
-      UI.playerRecord.textContent = `Score ${Math.round(this.player.score)} · KD ${this.player.knockdowns}`;
-      UI.enemyRecord.textContent = `${this.rules.label} AI · KD ${this.enemy.knockdowns}`;
+      UI.playerRecord.textContent = `Score ${Math.round(this.player.score)} - KD ${this.player.knockdowns}`;
+      UI.enemyRecord.textContent = `${this.rules.label} AI - KD ${this.enemy.knockdowns}`;
       UI.playerHealthBar.style.width = `${ph}%`;
-      UI.playerStaminaBar.style.width = `${clamp(this.player.stamina, 0, 100)}%`;
+      UI.playerStaminaBar.style.width = `${clamp((this.player.stamina / playerMaxStamina) * 100, 0, 100)}%`;
       UI.playerPowerBar.style.width = `${clamp(this.player.power, 0, 100)}%`;
       UI.enemyHealthBar.style.width = `${clamp((eh / (this.training ? 120 : 100)) * 100, 0, 100)}%`;
       UI.enemyStaminaBar.style.width = `${clamp(this.enemy.stamina, 0, 100)}%`;
       UI.enemyPowerBar.style.width = `${clamp(this.enemy.power, 0, 100)}%`;
       UI.roundLabel.textContent = this.training ? 'Training Mode' : `Round ${this.round} / ${this.maxRounds}`;
-      UI.timerLabel.textContent = this.training ? '∞' : formatTime(this.timeLeft);
+      UI.timerLabel.textContent = this.training ? 'Practice' : formatTime(this.timeLeft);
       UI.comboLabel.textContent = this.player.combo.toString();
       UI.comboText.textContent = this.player.power >= 100
         ? 'Power shot ready: press F.'
         : this.player.combo >= 3
           ? 'Combo flowing. Mix in hooks and uppercuts.'
           : 'Land clean punches to build power.';
-    this.updateCareerUI();      
+      UI.pointsLabel.textContent = Math.round(this.player.score).toString();
+      UI.cleanHitsLabel.textContent = this.fightStats.cleanHits.toString();
+
+      const objective = this.evaluateObjective();
+      UI.objectiveLabel.textContent = objective
+        ? objective.completed ? 'Done' : `${Math.floor(objective.value)}/${objective.target}`
+        : '--';
+
+      this.updateCareerUI();
     }
 
     draw() {
