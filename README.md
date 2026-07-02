@@ -1,5 +1,7 @@
 # Midnight Boxing Championship
 
+![](https://github.com/DQuanBui/pro_boxing_game/blob/main/boxing.avif)
+
 ## Project Overview
 
 **Midnight Boxing Championship** is an interactive browser-based boxing game built with **HTML, CSS, and JavaScript**. The game challenges players to win rounds, score knockdowns, manage stamina, build combos, block incoming punches, dodge counters, and defeat an AI-controlled opponent in a professional boxing match.
@@ -67,7 +69,7 @@ Career mode makes each fight more meaningful. Players earn XP, cash, and bonus p
 
 ## Project / App Result
 
-The deployed game can be accessed here: 
+The deployed game can be accessed here: **https://dquanbui.github.io/pro_boxing_game/**
 
 **Play Link:** 
 
